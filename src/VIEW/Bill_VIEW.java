@@ -1,0 +1,840 @@
+package VIEW;
+
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.math.RoundingMode;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingConstants;
+import javax.swing.border.LineBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.DefaultTableModel;
+
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.ss.util.RegionUtil;
+import org.apache.poi.xssf.usermodel.XSSFFont;
+import org.apache.poi.xssf.usermodel.XSSFRow;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.axis.NumberAxis;
+import org.jfree.chart.plot.CategoryPlot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.renderer.category.BarRenderer;
+import org.jfree.data.category.DefaultCategoryDataset;
+
+import com.toedter.calendar.JDateChooser;
+
+import BLL.Order_BLL;
+import BLL.Orderdetail_BLL;
+import DTO.Itemplus;
+import DTO.Order;
+import EDIT.RoundedPanel;
+
+public class Bill_VIEW extends RoundedPanel {
+	private static final long serialVersionUID = 1L;
+	private RoundedPanel panel_listorder;
+	private JTextField tf_searchorder;
+	private JTable table_listorder;
+	private DefaultTableModel modeltable_listorder;
+	private JDateChooser dateChooser_start;
+	private JDateChooser dateChooser_end;
+	
+	private RoundedPanel panel_detaiorder;
+	private JLabel label_datetime;
+	private JLabel label_employeeid;
+	private JScrollPane scrollPane_listdetailorder;
+	private JPanel panel_listdetailorder;
+	private JLabel label_total;
+	private JLabel label_getmoney;
+	private JLabel label_change;
+	
+	private JPanel panel_statistical;
+	
+	private String orderid;
+	private ChartPanel panel_chart;
+	private JScrollPane scrollPane;
+	private JButton button_excel;
+	private JLabel label_statistical;
+
+	public Bill_VIEW(int radius, Color backgroundColor) {
+		super(radius, backgroundColor);
+		setBounds(0, 0, 1190, 730);
+		setLayout(null);
+		
+		panel_listorder = new RoundedPanel(50, new Color(249, 230, 186));
+		panel_listorder.setBounds(0, 0, 710, 730);
+		this.add(panel_listorder);
+		panel_listorder.setLayout(null);
+		GUI_listorder();
+		
+		panel_detaiorder = new RoundedPanel(50, new Color(249, 230, 186));
+		panel_detaiorder.setBounds(730, 0, 460, 730);
+		this.add(panel_detaiorder);
+		panel_detaiorder.setLayout(null);
+		GUI_detailorder();
+		
+		panel_statistical = new JPanel();
+		panel_statistical.setBackground(new Color(249, 230, 186));
+		panel_statistical.setBounds(0, 70, 1190, 640);
+		panel_listorder.add(panel_statistical);
+		panel_statistical.setLayout(null);
+		panel_statistical.setVisible(false);
+		GUI_panelstatistical();
+		
+		getOrderByDateRange();
+	}
+	
+	private void GUI_listorder() {
+		tf_searchorder = new JTextField("ORD003");
+		tf_searchorder.setBounds(395, 20, 150, 25);
+		panel_listorder.add(tf_searchorder);
+		tf_searchorder.setColumns(10);
+		tf_searchorder.getDocument().addDocumentListener(new DocumentListener() {
+			public void changedUpdate(DocumentEvent e) {
+				Loaddatatotable();
+			}
+
+			public void removeUpdate(DocumentEvent e) {
+				Loaddatatotable();
+			}
+
+			public void insertUpdate(DocumentEvent e) {
+				Loaddatatotable();
+			}
+
+		});
+
+		scrollPane = new JScrollPane();
+		scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+//		scrollPane.setBorder(javax.swing.BorderFactory.createTitledBorder(null, "Danh sách tài khoản", javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION, javax.swing.border.TitledBorder.DEFAULT_POSITION, new java.awt.Font("Tahoma", Font.PLAIN, 20), new java.awt.Color(102, 102, 102))); // NOI18N
+		scrollPane.setBounds(10, 75, 680, 550);
+		panel_listorder.add(scrollPane);
+
+		table_listorder = new JTable();
+		table_listorder.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		scrollPane.setViewportView(table_listorder);
+		table_listorder.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+			public void valueChanged(ListSelectionEvent event) {
+				if (!event.getValueIsAdjusting()) {
+					int selectedRow = table_listorder.getSelectedRow();
+					if (selectedRow != -1) {
+						orderid = modeltable_listorder.getValueAt(selectedRow, 0).toString();
+						showDetailOrder(orderid);
+
+					}
+				}
+			}
+		});
+
+		String[] columnNames = { "Mã hóa đơn", "Khách hàng", "Đổi điểm" };
+		modeltable_listorder = new DefaultTableModel(columnNames, 0);
+
+		JLabel lblNewLabel_1 = new JLabel("Từ:");
+		lblNewLabel_1.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_1.setBounds(10, 20, 35, 20);
+		panel_listorder.add(lblNewLabel_1);
+
+		dateChooser_start = new JDateChooser();
+		dateChooser_start.setDateFormatString("dd/MM/yyyy");
+		dateChooser_start.setBounds(50, 20, 120, 25);
+		panel_listorder.add(dateChooser_start);
+
+		dateChooser_start.getDateEditor().addPropertyChangeListener(new PropertyChangeListener() {
+			@Override
+			public void propertyChange(PropertyChangeEvent evt) {
+				if ("date".equals(evt.getPropertyName())) {
+					Date startDate = dateChooser_start.getDate();
+					Date endDate = dateChooser_end.getDate();
+					if (startDate != null && endDate != null && startDate.after(endDate)) {
+						JOptionPane.showMessageDialog(null, "Start date must be before or equal to end date.");
+						dateChooser_start.setDate(endDate);
+					} else {
+						getOrderByDateRange();
+					}
+				}
+			}
+		});
+
+		JLabel lblNewLabel_2 = new JLabel("Đến:");
+		lblNewLabel_2.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_2.setBounds(200, 20, 45, 20);
+		panel_listorder.add(lblNewLabel_2);
+
+		dateChooser_end = new JDateChooser();
+		dateChooser_end.setDateFormatString("dd/MM/yyyy");
+		dateChooser_end.setBounds(250, 20, 120, 25);
+		panel_listorder.add(dateChooser_end);
+		dateChooser_end.getDateEditor().addPropertyChangeListener(new PropertyChangeListener() {
+			@Override
+			public void propertyChange(PropertyChangeEvent evt) {
+				if ("date".equals(evt.getPropertyName())) {
+					Date startDate = dateChooser_start.getDate();
+					Date endDate = dateChooser_end.getDate();
+					if (startDate != null && endDate != null && endDate.before(startDate)) {
+						JOptionPane.showMessageDialog(null, "End date must be after or equal to start date.");
+						dateChooser_end.setDate(startDate);
+					} else {
+						getOrderByDateRange();
+					}
+				}
+			}
+		});
+
+		// get today'date
+		Calendar calendar = Calendar.getInstance();
+		Date today = calendar.getTime();
+		dateChooser_start.setDate(today);
+
+		// get tomorrow's date
+		calendar.add(Calendar.DAY_OF_YEAR, 1);
+		Date tomorrow = calendar.getTime();
+		dateChooser_end.setDate(tomorrow);
+
+		label_statistical = new JLabel("Thống kê");
+		label_statistical.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_statistical.setBounds(560, 20, 120, 30);
+		label_statistical.setBorder(new LineBorder(Color.BLACK, 1));
+		label_statistical.setHorizontalAlignment(SwingConstants.CENTER);
+		panel_listorder.add(label_statistical);
+		label_statistical.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				turnonStatisticalMode();
+			}
+			@Override
+			public void mouseEntered(MouseEvent e) {
+			}
+			@Override
+			public void mouseExited(MouseEvent e) {
+			}
+		});
+
+		button_excel = new JButton("Xuất excel");
+		button_excel.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				int selectedRow = table_listorder.getSelectedRow();
+				if (selectedRow != -1) {
+					try {
+						orderid = modeltable_listorder.getValueAt(selectedRow, 0).toString();
+						Export_Excel_Bill(orderid);
+					} catch (FileNotFoundException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					} catch (IOException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+				} else {
+					JOptionPane.showMessageDialog(null, "Vui lòng chọn hóa đơn trước");
+				}
+			}
+		});
+		button_excel.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		button_excel.setBounds(475, 650, 175, 40);
+		panel_listorder.add(button_excel);
+
+	}
+	
+	private void GUI_detailorder() {
+		JLabel lblNewLabel = new JLabel("Hóa đơn");
+		lblNewLabel.setFont(new Font("Tahoma", Font.BOLD, 25));
+		lblNewLabel.setBounds(0, 70, 450, 25);
+		lblNewLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		panel_detaiorder.add(lblNewLabel);
+
+		JLabel lblNewLabel_3 = new JLabel("Thời gian");
+		lblNewLabel_3.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_3.setBounds(10, 115, 120, 25);
+		panel_detaiorder.add(lblNewLabel_3);
+
+		label_datetime = new JLabel();
+		label_datetime.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_datetime.setBounds(150, 115, 200, 25);
+		panel_detaiorder.add(label_datetime);
+
+		JLabel lblNewLabel_3_1 = new JLabel("Mã nhân viên");
+		lblNewLabel_3_1.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_3_1.setBounds(10, 155, 120, 25);
+		panel_detaiorder.add(lblNewLabel_3_1);
+
+		label_employeeid = new JLabel();
+		label_employeeid.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_employeeid.setBounds(150, 155, 200, 25);
+		panel_detaiorder.add(label_employeeid);
+
+		JLabel lblNewLabel_3_1_1 = new JLabel("Name");
+		lblNewLabel_3_1_1.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_3_1_1.setBounds(10, 195, 80, 25);
+		panel_detaiorder.add(lblNewLabel_3_1_1);
+
+		scrollPane_listdetailorder = new JScrollPane();
+		scrollPane_listdetailorder.setBounds(0, 230, 460, 350);
+		panel_detaiorder.add(scrollPane_listdetailorder);
+
+		panel_listdetailorder = new JPanel();
+		scrollPane_listdetailorder.setViewportView(panel_listdetailorder);
+		panel_listdetailorder.setBackground(new Color(249, 230, 186));
+//		panel_listdetailorder.setLayout(new BoxLayout(panel_listdetailorder, BoxLayout.Y_AXIS));
+		panel_listdetailorder.setLayout(null);
+		
+		JLabel lblNewLabel_6 = new JLabel("Tổng tiền");
+		lblNewLabel_6.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_6.setHorizontalAlignment(SwingConstants.RIGHT);
+		lblNewLabel_6.setBounds(175, 590, 100, 25);
+		panel_detaiorder.add(lblNewLabel_6);
+
+		label_total = new JLabel();
+		label_total.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_total.setHorizontalAlignment(SwingConstants.RIGHT);
+		label_total.setBounds(280, 590, 160, 25);
+		panel_detaiorder.add(label_total);
+
+		JLabel lblNewLabel_6_2 = new JLabel("Tiền nhận");
+		lblNewLabel_6_2.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_6_2.setBounds(175, 625, 100, 25);
+		lblNewLabel_6_2.setHorizontalAlignment(SwingConstants.RIGHT);
+		panel_detaiorder.add(lblNewLabel_6_2);
+
+		JLabel lblNewLabel_6_3 = new JLabel("Tiền thừa");
+		lblNewLabel_6_3.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_6_3.setHorizontalAlignment(SwingConstants.RIGHT);
+		lblNewLabel_6_3.setBounds(175, 660, 100, 25);
+		panel_detaiorder.add(lblNewLabel_6_3);
+
+		label_getmoney = new JLabel();
+		label_getmoney.setHorizontalAlignment(SwingConstants.RIGHT);
+		label_getmoney.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_getmoney.setBounds(280, 625, 160, 25);
+		panel_detaiorder.add(label_getmoney);
+
+		label_change = new JLabel();
+		label_change.setHorizontalAlignment(SwingConstants.RIGHT);
+		label_change.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_change.setBounds(280, 660, 160, 25);
+		panel_detaiorder.add(label_change);
+
+		JLabel lblNewLabel_9 = new JLabel("QTY");
+		lblNewLabel_9.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_9.setBounds(170, 195, 45, 25);
+		panel_detaiorder.add(lblNewLabel_9);
+
+		JLabel lblNewLabel_10 = new JLabel("Price");
+		lblNewLabel_10.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_10.setHorizontalAlignment(SwingConstants.CENTER);
+		lblNewLabel_10.setBounds(220, 195, 100, 25);
+		panel_detaiorder.add(lblNewLabel_10);
+
+		JLabel lblNewLabel_11 = new JLabel("Total");
+		lblNewLabel_11.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		lblNewLabel_11.setHorizontalAlignment(SwingConstants.CENTER);
+		lblNewLabel_11.setBounds(340, 195, 100, 25);
+		panel_detaiorder.add(lblNewLabel_11);
+
+	}
+	
+	private void GUI_panelstatistical() {
+		JComboBox<String> comboBox = new JComboBox<String>();
+		comboBox.setBounds(20, 10, 150, 30);
+		comboBox.addItem("Doanh số hằng tháng");
+		comboBox.addItem("Sản phẩm bán chạy");
+		panel_statistical.add(comboBox);
+		
+		JLabel label_showchar = new JLabel("Hiển thị biểu đồ");
+		label_showchar.setHorizontalAlignment(SwingConstants.CENTER);
+		label_showchar.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_showchar.setBorder(new LineBorder(Color.BLACK, 1));
+		label_showchar.setBounds(220, 10, 180, 40);
+		label_showchar.addMouseListener(new MouseAdapter() {
+		    @Override
+		    public void mouseClicked(MouseEvent e) {
+		    	int index = comboBox.getSelectedIndex();
+		    	if(index == 0) {
+		    		showMonthlySale();
+		    	}
+		    	else {
+		    		showItemCounts();
+		    	}
+		    }
+		    @Override
+		    public void mouseEntered(MouseEvent e) {
+		    }
+		    @Override
+		    public void mouseExited(MouseEvent e) {
+		    }
+		});
+		panel_statistical.add(label_showchar);
+		
+		JLabel label_exit = new JLabel("Thoát");
+		label_exit.addMouseListener(new MouseAdapter() {
+		    @Override
+		    public void mouseClicked(MouseEvent e) {
+		    	turnoffStatisticalMode();
+		    }
+		    @Override
+		    public void mouseEntered(MouseEvent e) {
+		    }
+		    @Override
+		    public void mouseExited(MouseEvent e) {
+		    }
+		});
+		label_exit.setFont(new Font("Tahoma", Font.PLAIN, 20));
+		label_exit.setBounds(960, 20, 120, 30);
+		label_exit.setBorder(new LineBorder(Color.BLACK, 1));
+		label_exit.setHorizontalAlignment(SwingConstants.CENTER);
+		panel_listorder.add(label_exit);
+	}
+	
+	public String getFormattedDate(JDateChooser dateChooser) {
+		Date date = dateChooser.getDate();
+		if (date != null) {
+			SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy");
+			return dateFormat.format(date);
+		}
+		return "";
+	}
+
+	private void getOrderByDateRange() {
+		modeltable_listorder.setRowCount(0);
+		String date_start = getFormattedDate(dateChooser_start);
+		String date_end = getFormattedDate(dateChooser_end);
+//		System.out.println(date_start + " " + date_end);
+		List<Order> list = Order_BLL.getInstance().getOrderByDateRange(date_start, date_end);
+//		System.out.println(list.size());
+		for (Order order : list) {
+			Object[] row = { order.getOrderID(), order.getCustomerName(), order.getBonusitemName() };
+			modeltable_listorder.addRow(row);
+		}
+		table_listorder.setModel(modeltable_listorder);
+	}
+
+	private void Loaddatatotable() {
+		modeltable_listorder.setRowCount(0);
+		String search = tf_searchorder.getText();
+
+		List<Order> list = Order_BLL.getInstance().getOrderByID(search);
+		for (Order order : list) {
+			Object[] row = { order.getOrderID(), order.getCustomerName(), order.getBonusitemName() };
+			modeltable_listorder.addRow(row);
+		}
+
+		table_listorder.setModel(modeltable_listorder);
+	}
+
+	private void showDetailOrder(String orderid) {
+		Order order = Order_BLL.getInstance().getOrderByID(orderid).getFirst();
+		label_datetime.setText(order.getDatetime());
+		label_employeeid.setText(order.getEmployeeID());
+		label_total.setText("" + order.getTotal());
+		label_getmoney.setText("" + order.getTake());
+		label_change.setText("" + order.getReturnmoney());
+
+		List<Itemplus> list = Orderdetail_BLL.getInstance().GetItemplusByOrderID(orderid);
+		display(list);
+	}
+
+	public boolean isLabelContentVisible(JLabel label) {
+		FontMetrics fontMetrics = label.getFontMetrics(label.getFont());
+		int textWidth = fontMetrics.stringWidth(label.getText());
+		int labelWidth = label.getPreferredSize().width;
+
+		return textWidth <= labelWidth;
+
+	}
+
+	private JPanel createPanelItemplus(Itemplus itemplus, int y) {
+		JPanel panel = new JPanel();
+		panel.setLayout(null);
+		panel.setBackground(new Color(249, 230, 186));
+
+		int check;
+		JLabel label_nameitem = new JLabel(itemplus.getItemName());
+		label_nameitem.setPreferredSize(new Dimension(150, 30));
+		label_nameitem.setFont(new Font("Tahoma", Font.PLAIN, 18));
+//		label_nameitem.setBorder(new LineBorder(Color.black, 1));
+		if (isLabelContentVisible(label_nameitem)) {
+			label_nameitem.setBounds(0, 0, 150, 30);
+			panel.setBounds(5, y, 430, 30);
+			panel.add(label_nameitem);
+			check = 0;
+
+		} else {
+			label_nameitem.setPreferredSize(new Dimension(430, 30));
+			label_nameitem.setBounds(0, 0, 430, 30);
+			panel.setBounds(5, y, 430, 60);
+			panel.add(label_nameitem);
+			check = 30;
+		}
+
+//		System.out.println(check);
+		JLabel label_quantity = new JLabel(itemplus.getQuantity() + "");
+		label_quantity.setBounds(160, check, 45, 30);
+		label_quantity.setHorizontalAlignment(SwingConstants.CENTER);
+		panel.add(label_quantity);
+		label_quantity.setFont(new Font("Tahoma", Font.PLAIN, 18));
+
+		JLabel label_price = new JLabel("" + itemplus.getPrice());
+		label_price.setFont(new Font("Tahoma", Font.PLAIN, 18));
+		label_price.setBounds(220, check, 100, 30);
+		panel.add(label_price);
+
+		JLabel label_total = new JLabel("" + itemplus.getTotal());
+		label_total.setFont(new Font("Tahoma", Font.PLAIN, 18));
+		label_total.setBounds(330, check, 100, 30);
+		panel.add(label_total);
+
+		return panel;
+	}
+
+	private void display(List<Itemplus> list) {
+		int y = 10;
+		int distance = 10;
+		panel_listdetailorder.removeAll();
+		for (Itemplus itemplus : list) {
+			JPanel panel = createPanelItemplus(itemplus, y);
+			panel_listdetailorder.add(panel);
+			y += panel.getHeight() + distance;
+		}
+		if (y > scrollPane_listdetailorder.getHeight()) {
+			scrollPane_listdetailorder.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		} else {
+			scrollPane_listdetailorder.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+		}
+		panel_listdetailorder.revalidate();
+		panel_listdetailorder.repaint();
+
+	}
+
+	public void Export_Excel_Bill(String orderID) throws FileNotFoundException, IOException {
+		Order order = Order_BLL.getInstance().getOrderByID(orderID).getFirst();
+
+		Locale locale = new Locale("vi", "VN");
+		NumberFormat format = NumberFormat.getCurrencyInstance(locale);
+		format.setRoundingMode(RoundingMode.HALF_UP);
+
+		// Tạo workbook và sheet
+		XSSFWorkbook workBook = new XSSFWorkbook();
+		XSSFSheet sheet = workBook.createSheet("Hóa đơn");
+
+		XSSFRow row = null;
+		Cell cell = null;
+
+		// Merge các ô để tạo tiêu đề
+		CellRangeAddress range = new CellRangeAddress(1, 1, 0, 11);
+		sheet.addMergedRegion(range);
+
+		// Định dạng kiểu ô cho tiêu đề và nội dung
+		CellStyle styleId = createCellStyle(workBook, 16, true, false, false);
+		CellStyle style_Bold = createCellStyle(workBook, 13, true, false, false);
+		CellStyle style_Strikeout = createCellStyle(workBook, 13, false, true, false);
+		CellStyle style_Common = createCellStyle(workBook, 12, false, false, false);
+
+		// Tạo tiêu đề cho hóa đơn
+		row = sheet.createRow(1);
+		cell = row.createCell(0, org.apache.poi.ss.usermodel.CellType.STRING);
+		cell.setCellValue("HÓA ĐƠN");
+		cell.setCellStyle(styleId);
+
+		// Thông tin hóa đơn
+		createCell(sheet, 3, 0, "Mã:", style_Bold);
+		createMergedCell(sheet, 3, 1, 4, orderID, style_Common);
+		createCell(sheet, 3, 7, "Ngày:", style_Bold);
+		createMergedCell(sheet, 3, 8, 11, order.getDatetime(), style_Common);
+
+		// Thông tin nhân viên
+		createCell(sheet, 4, 0, "Nhân viên:", style_Bold);
+		createMergedCell(sheet, 4, 1, 4, "Nhân viên", style_Common);
+
+		// Thông tin khách hàng
+		createCell(sheet, 4, 7, "Khách hàng:", style_Bold);
+		createMergedCell(sheet, 4, 8, 11, order.getCustomerName(), style_Common);
+
+		// Tạo dòng phân cách
+		createSeparatorRow(sheet, 6, 1, 10, style_Bold);
+
+		// Tiêu đề cột cho chi tiết hóa đơn
+		createHeaderRow(sheet, 8, style_Bold);
+
+		// Thêm chi tiết hóa đơn vào bảng
+		List<Itemplus> items = Orderdetail_BLL.getInstance().GetItemplusByOrderID(orderID);
+		int i = 0; // Khởi tạo biến i
+		if (items != null) {
+			addOrderDetails(sheet, items, style_Common, style_Strikeout, format, i);
+		}
+
+		// Tổng kết hóa đơn (tổng tiền, tiền nhận, tiền thối)
+		addFooter(sheet, order, style_Bold, style_Common, format, items.size());
+
+		// Định dạng border cho toàn bộ bảng
+		CellRangeAddress rangeBig = new CellRangeAddress(0, 16 + items.size(), 0, 11);
+		RegionUtil.setBorderRight(BorderStyle.THIN, rangeBig, sheet);
+		RegionUtil.setBorderLeft(BorderStyle.DOUBLE, rangeBig, sheet);
+		RegionUtil.setBorderTop(BorderStyle.DOUBLE, rangeBig, sheet);
+		RegionUtil.setBorderBottom(BorderStyle.THIN, rangeBig, sheet);
+
+		// Lưu file Excel
+		saveExcelFile(workBook);
+	}
+
+	private CellStyle createCellStyle(XSSFWorkbook workBook, int fontSize, boolean isBold, boolean isStrikeout,
+			boolean isItalic) {
+		CellStyle style = workBook.createCellStyle();
+		XSSFFont font = workBook.createFont();
+		font.setFontHeight(fontSize);
+		font.setBold(isBold);
+		font.setStrikeout(isStrikeout);
+		font.setItalic(isItalic);
+		font.setColor(IndexedColors.BLACK1.getIndex());
+		style.setFont(font);
+
+		return style;
+	}
+
+	private void createCell(XSSFSheet sheet, int rowNum, int colNum, String value, CellStyle style) {
+		XSSFRow row = sheet.getRow(rowNum) != null ? sheet.getRow(rowNum) : sheet.createRow(rowNum);
+		Cell cell = row.createCell(colNum, org.apache.poi.ss.usermodel.CellType.STRING);
+		cell.setCellValue(value);
+		cell.setCellStyle(style);
+	}
+
+	private void createMergedCell(XSSFSheet sheet, int rowNum, int colStart, int colEnd, String value,
+			CellStyle style) {
+		CellRangeAddress range = new CellRangeAddress(rowNum, rowNum, colStart, colEnd);
+		sheet.addMergedRegion(range);
+		createCell(sheet, rowNum, colStart, value, style);
+	}
+
+	private void createSeparatorRow(XSSFSheet sheet, int rowNum, int colStart, int colEnd, CellStyle style) {
+		// Xóa các vùng hợp nhất đã tồn tại ở hàng hiện tại
+		for (int i = sheet.getNumMergedRegions() - 1; i >= 0; i--) {
+			CellRangeAddress mergedRegion = sheet.getMergedRegion(i);
+			if (mergedRegion.getFirstRow() == rowNum && mergedRegion.getLastRow() == rowNum) {
+				sheet.removeMergedRegion(i);
+			}
+		}
+
+		// Thêm vùng hợp nhất mới
+		CellRangeAddress range = new CellRangeAddress(rowNum, rowNum, colStart, colEnd);
+		sheet.addMergedRegion(range);
+		createCell(sheet, rowNum, colStart,
+				"------------------------------------------------------------------------------------------------------------------------------------------------",
+				style);
+	}
+
+	private void createHeaderRow(XSSFSheet sheet, int rowNum, CellStyle style) {
+		createCell(sheet, rowNum, 0, "STT", style);
+		createMergedCell(sheet, rowNum, 1, 4, "Sản phẩm", style);
+		createCell(sheet, rowNum, 5, "SL", style);
+		createMergedCell(sheet, rowNum, 6, 7, "Giá", style);
+		createMergedCell(sheet, rowNum, 8, 9, "Giá giảm", style);
+		createMergedCell(sheet, rowNum, 10, 11, "Thành tiền", style);
+	}
+
+	private void addOrderDetails(XSSFSheet sheet, List<Itemplus> items, CellStyle commonStyle, CellStyle strikeoutStyle,
+			NumberFormat format, int i) {
+		for (i = 0; i < items.size(); i++) {
+			Itemplus item = items.get(i);
+//			XSSFRow row = sheet.createRow(10 + i);
+			createCell(sheet, 10 + i, 0, String.valueOf(i + 1), commonStyle);
+			createMergedCell(sheet, 10 + i, 1, 4, item.getItemName(), commonStyle);
+			createCell(sheet, 10 + i, 5, String.valueOf(item.getQuantity()), commonStyle);
+
+			double price = item.getPrice();
+			createMergedCell(sheet, 10 + i, 6, 7, format.format(price), commonStyle);
+			createMergedCell(sheet, 10 + i, 8, 9, format.format(0), commonStyle);
+			createMergedCell(sheet, 10 + i, 10, 11, format.format(item.getTotal()), commonStyle);
+		}
+	}
+
+	private void addFooter(XSSFSheet sheet, Order order, CellStyle boldStyle, CellStyle commonStyle,
+			NumberFormat format, int itemCount) {
+		int currentRow = 11 + itemCount;
+
+		createSeparatorRow(sheet, currentRow, 1, 10, boldStyle);
+		
+	    String bonusItemName = order.getBonusitemName();
+	    if (bonusItemName == null || bonusItemName.isEmpty()) {
+	        bonusItemName = "Không có";
+	    }
+
+		currentRow++;
+		createMergedCell(sheet, currentRow, 6, 7, "Đổi điểm:", boldStyle);
+		createMergedCell(sheet, currentRow, 8, 10, bonusItemName, commonStyle);
+		
+		currentRow++;
+		createMergedCell(sheet, currentRow, 6, 7, "Tổng:", boldStyle);
+		createMergedCell(sheet, currentRow, 8, 10, format.format(order.getTotal()), commonStyle);
+
+		currentRow++;
+		createMergedCell(sheet, currentRow, 6, 7, "Tiền nhận:", boldStyle);
+		createMergedCell(sheet, currentRow, 8, 10, format.format(order.getTake()), commonStyle);
+
+		currentRow++;
+		createMergedCell(sheet, currentRow, 6, 7, "Tiền thối:", boldStyle);
+		createMergedCell(sheet, currentRow, 8, 10, format.format(order.getReturnmoney()), commonStyle);
+	}
+
+	private void saveExcelFile(XSSFWorkbook workBook) throws FileNotFoundException, IOException {
+		JFileChooser fs = new JFileChooser(new File("c:\\"));
+		fs.setDialogTitle("Save");
+
+		FileNameExtensionFilter filter = new FileNameExtensionFilter("Excel files", "xlsx");
+		fs.setFileFilter(filter);
+
+		int returnVal = fs.showSaveDialog(null);
+		if (returnVal == JFileChooser.APPROVE_OPTION) {
+			File file = fs.getSelectedFile();
+			if (!file.getName().toLowerCase().endsWith(".xlsx")) {
+				file = new File(file.getAbsolutePath() + ".xlsx");
+			}
+			FileOutputStream fos = new FileOutputStream(file);
+			workBook.write(fos);
+			fos.close();
+		}
+	}
+	
+	private void turnonStatisticalMode() {
+		panel_listorder.setBounds(0, 0, 1190, 730);
+		panel_detaiorder.setVisible(false);
+		scrollPane.setVisible(false);
+		button_excel.setVisible(false);
+		label_statistical.setVisible(false);
+		panel_statistical.setVisible(true);
+	}
+	
+	private void turnoffStatisticalMode() {
+		panel_listorder.setBounds(0, 0, 710, 730);
+		panel_detaiorder.setVisible(true);
+		scrollPane.setVisible(true);
+		button_excel.setVisible(true);
+		label_statistical.setVisible(true);
+		panel_statistical.setVisible(false);
+	}
+	
+	private void showMonthlySale() {
+		List<Integer> salesData = Order_BLL.getInstance().getTotalSalesPerMonth();
+		
+        
+	    // Create a dataset for the chart
+	    DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+	    
+	    // Populate the dataset with the sales data
+	    for (int month = 1; month <= salesData.size(); month++) {
+	        // Use month number as a String ("1", "2", ..., "12")
+	        String monthLabel = String.valueOf(month);
+	        int totalSales = salesData.get(month - 1);
+	        
+	        dataset.addValue(totalSales, "Tổng lương", monthLabel);
+	    }
+
+	    // Create the bar chart
+	    JFreeChart barChart = ChartFactory.createBarChart(
+	            "Tổng lương hàng tháng năm 2024", // Chart title
+	            "Tháng",                         // Domain axis label
+	            "Tổng lương",                    // Range axis label
+	            dataset,                         // Data
+	            PlotOrientation.VERTICAL,        // Orientation
+	            true,                            // Include legend
+	            true,                            // Tooltips
+	            false                            // URLs
+	    );
+	    
+	    if (panel_chart != null) {
+	        panel_statistical.remove(panel_chart);
+	    }
+        
+        panel_chart = new ChartPanel(barChart);
+        panel_chart.setBounds(145, 80, 800, 500);
+        panel_statistical.add(panel_chart);
+        panel_statistical.revalidate();
+        panel_statistical.repaint();
+	}
+	
+    public void showItemCounts() {
+        // Fetch item counts from the data access layer
+        Map<String, Integer> itemCounts = Order_BLL.getInstance().getItemCounts();
+        
+        // Create a dataset for the chart
+        DefaultCategoryDataset dataset = new DefaultCategoryDataset();
+        
+        // Populate the dataset with item counts
+        for (Map.Entry<String, Integer> entry : itemCounts.entrySet()) {
+            String itemName = entry.getKey();
+            int quantity = entry.getValue();
+            
+            dataset.addValue(quantity, "Số lượng", itemName);
+        }
+
+        // Create the bar chart
+        JFreeChart barChart = ChartFactory.createBarChart(
+                "Số lượng gọi món của từng sản phẩm", // Chart title
+                "Sản phẩm",                         // Domain axis label
+                "Số lượng",                         // Range axis label
+                dataset,                            // Data
+                PlotOrientation.VERTICAL,           // Orientation
+                true,                               // Include legend
+                true,                               // Tooltips
+                false                               // URLs
+        );
+
+        // Customize the plot to ensure integer values on the y-axis
+        CategoryPlot plot = (CategoryPlot) barChart.getPlot();
+        NumberAxis rangeAxis = (NumberAxis) plot.getRangeAxis();
+        rangeAxis.setStandardTickUnits(NumberAxis.createIntegerTickUnits());
+
+        // Optional: Set custom renderer if needed
+        BarRenderer renderer = (BarRenderer) plot.getRenderer();
+        renderer.setDrawBarOutline(false);
+        
+        // Create and set the ChartPanel
+        if (panel_chart != null) {
+            panel_statistical.remove(panel_chart);
+        }
+        
+        panel_chart = new ChartPanel(barChart);
+        panel_chart.setBounds(5, 80, 1180, 500);
+        panel_statistical.add(panel_chart);
+        panel_statistical.revalidate();
+        panel_statistical.repaint();
+    }
+
+}
